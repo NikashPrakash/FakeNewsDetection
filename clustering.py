@@ -1,4 +1,4 @@
-#Venkat-Notes (please read fully): First code block is most same from data_process.py. 
+#Notes (please read fully): First code block is most same from data_process.py. 
 #Changed a few important things: 
 #1). Dropped rows with NaN value for text in labelled and unlabelled
 #2). Dropped Stop Words and Punctuations
@@ -25,6 +25,7 @@ from sklearn.cluster import KMeans
 
 nltk.download('stopwords')
 nltk.download('punkt')
+glove = gensim.downloader.load('glove-wiki-gigaword-200')
 
 def process_fake_news():
     filename = "fake-news.csv"
@@ -40,51 +41,102 @@ def process_unlabelled_data():
 
 def get_glove_feature(df):
     features = []
-    glove = gensim.downloader.load('glove-wiki-gigaword-200')
     stop_words = set(stopwords.words('english'))
     for i, row in df.iterrows():
         text = row["text"]
         text = str(text).lower() 
         words = word_tokenize(text)
         
-        words = [word for word in words if word not in stop_words and word.isalpha()]
+        words = [word for word in words if word not in stop_words and word.isalnum()]
         
         feature = [glove[word] for word in words if word in glove]
         
         features.append(np.mean(feature, axis=0) if feature else np.zeros(200))
     return np.array(features)
 
-def split(df):
+def split(df_x, df_y):
     random_state = 42
-    df_train, df_test = train_test_split(df, train_size=0.75, random_state=random_state)
-    return df_train, df_test
+    X_train, X_test, y_train, y_test = train_test_split(df_x, df_y, train_size=0.75, random_state=random_state)
+    return X_train, X_test, y_train, y_test
 
 def process():
     df = process_fake_news()
     unlab = process_unlabelled_data()
     df_features = get_glove_feature(df)
-    unlab_features = get_glove_feature(unlab)
-    train_label, test = split(df_features)
-    train_unlabel = unlab_features
-    return train_label, train_unlabel, test
+    train_unlabel = get_glove_feature(unlab)
+    train_label, X_test, y_label, y_test = split(df_features, df["label"])
+    
+    return train_label, X_test, y_label, y_test, train_unlabel
 
-train_label, train_unlabel, test = process()
 
-#Venkat-Note: K-Means is very sensitive to the scale of the features, so used L2 normalization. L2 normalization will not distort direction so semantic value from GloVe will still be there
+#Note: K-Means is very sensitive to the scale of the features, so used L2 normalization. L2 normalization will not distort direction so semantic value from GloVe will still be there
 def normalize(features):
     normalizer = Normalizer()
     return normalizer.fit_transform(features)
 
-def kmeans_clustering(normalized_data):
-    kmeans = KMeans(n_clusters=3) #Venkat-Note: for the 3 categories - change accordingly as needed
+def clustering(normalized_data):
+    # Change to hierarchical clustering, compare different linkage methods for best
+    kmeans = KMeans(n_clusters=2) #Note: for the 3 categories - change accordingly as needed
     kmeans.fit(normalized_data)
     return kmeans.labels_
+#For now we are clustering both labelled and unlabelled data together as this si the standard.
+#A possible future direction is to first cluster labelled data and get the cluster boundaries, before labelling unlabelled data based on where it falls in the boundaries.
+#This may result in improvement
 
 def normalize_and_cluster(train_label, train_unlabel):
-    full_data = np.vstack((train_label, train_unlabel)) #Venkat-Note: combined the label and unlabeled data
+    full_data = np.vstack((train_label, train_unlabel)) #Note: combined the labeled and unlabeled data
     normalized_data = normalize(full_data)
-    labels = kmeans_clustering(normalized_data)
+    labels = clustering(normalized_data)
 
     return labels
 
-labels = normalize_and_cluster(train_label, train_unlabel)
+
+def actual_label(labels, train_label, y_label):
+    """
+    To give the unlabeled data labels based of the labeled data set?    
+    """
+    cluster0 = {}
+    cluster0["lab_0"] = 0
+    cluster0["lab_1"] = 0
+    cluster1 = {}
+    cluster1["lab_0"] = 0
+    cluster1["lab_1"] = 0
+    i = 0
+    size = train_label.shape[0]
+    for label in labels:
+        if i>=size:
+            break
+        if label == 0:
+            actual_label = y_label.iloc[i]
+            if actual_label == 0:
+                cluster0["lab_0"] += 1
+            else:
+                cluster0["lab_1"] += 1
+        else:
+            actual_label = y_label.iloc[i]
+            if actual_label == 0:
+                cluster1["lab_0"] += 1
+            else:
+                cluster1["lab_1"] += 1
+        i += 1
+    ratio0 = cluster0["lab_0"]/cluster1["lab_0"]
+    ratio1 = cluster0["lab_1"]/cluster1["lab_1"]
+    y_unlabel = labels[size:]
+    if ratio1 > ratio0:
+        for label in y_unlabel:
+            if label == 0:
+                label = 1
+            else:
+                label = 0
+    return y_unlabel
+
+    
+
+if __name__ == "__main__":
+    train_label, X_test, y_label, y_test, train_unlabel = process()
+
+    labels = normalize_and_cluster(train_label, train_unlabel)
+
+    y_unlabel = actual_label(labels, train_label, y_label)
+
+    x = 1

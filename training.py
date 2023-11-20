@@ -5,7 +5,7 @@ from transformers import AutoTokenizer,AdamW,DistilBertModel
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-form data_process import *
+from data_process import *
 
 class StanceDetect(nn.Module):
     def __init__(self, distilBert: DistilBertModel, num_pos: int, hidden_dims: list(int)):
