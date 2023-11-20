@@ -10,12 +10,17 @@ def process_fake_news():
     df = pd.read_csv(filename)
     return df[["text", "label"]]
 
+def process_unlabelled_data():
+    filename = "political-bias.csv"
+    df = pd.read_csv(filename)
+    return df[["text"]]
+
 def get_glove_feature(df):
     features = []
+    glove = gensim.downloader.load('glove-wiki-gigaword-200')
     for i, row in df.iterrows():
         text = row["text"]
         text = text.lower()
-        glove = gensim.downloader.load('glove-wiki-gigaword-200')
         words = word_tokenize(text)
         feature = []
         for word in words:
@@ -24,16 +29,6 @@ def get_glove_feature(df):
         features.append(feature)
     features = np.array(features)
     return features
-
-    def feature_gen(headline):
-        tokens = word_tokenize(headline.lower())
-        indices = [self.glove.key_to_index[token] for token in tokens if token in self.glove.key_to_index]
-        if indices:  
-            vectors = matrix[indices]
-            mean_vector = np.mean(vectors, axis=0)
-            return mean_vector
-    # return np.array(pd.DataFrame(df['headline'].apply(feature_gen).tolist()))
-
 
 def split(df):
     random_state = 42
@@ -44,13 +39,15 @@ def split(df):
 
 
 
-def big_news():
-    with open('FILL IN FILE NAME(S)') as fp:
-        train = [json.loads(line) for line in fp]
+# def big_news():
+#     with open('FILL IN FILE NAME(S)') as fp:
+#         train = [json.loads(line) for line in fp]
         
 def process():
     df = process_fake_news()
     #df = big_news()
-    df = get_glove_feature(df)
-    train, test = split(df)
-    return train, test
+    unlab = process_unlabelled_data()
+    df,unlab = get_glove_feature(df), get_glove_feature(unlab)
+    train_label, test = split(df)
+    train_unlabel = unlab
+    return train_label, train_unlabel, test
