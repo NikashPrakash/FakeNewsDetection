@@ -14,9 +14,11 @@
 4. We will train either a RNN or transformer to classify new inputs into a label.
 5. We will test on our test data set and use evaluation metrics to evalute performance.
 
+Note: We will also try Mean Teacher ass our SSL method to see if it improves results
+
 <!-- input for cluster: -->
 
- 
+
 ## Model Architecture
 
 #### Baseline Model
