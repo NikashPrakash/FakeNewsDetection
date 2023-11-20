@@ -22,3 +22,9 @@
 #### Baseline Model
 
 #### RNN or Transformer
+
+##### Transformer
+1. DistilBert Layer
+2. Linear Layer 1: input_dim=hidden_dim[0], output=hidden_dim[1] --
+3. ReLU
+4. Linear Layer 2: input_dim=hidden_dim[1], output dim = (2,3)
