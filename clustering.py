@@ -22,6 +22,7 @@ from sklearn.model_selection import train_test_split
 import gensim.downloader
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
+import data_process # For later, integrate common functions to reduce redundancy
 
 nltk.download('stopwords')
 nltk.download('punkt')
@@ -131,12 +132,14 @@ def actual_label(labels, train_label, y_label):
     return y_unlabel
 
     
+def cluster_then_label():
+    x_train_label, x_test, y_label, y_test, train_unlabel = process()
+    labels = normalize_and_cluster(x_train_label, train_unlabel)
+    y_unlabel = actual_label(labels, x_train_label, y_label)
+    
+    x_train = np.vstack((x_train_label, train_unlabel))
+    y_train = np.vstack((y_label, y_unlabel))
+    return x_train, y_train, x_test, y_test
 
 if __name__ == "__main__":
-    train_label, X_test, y_label, y_test, train_unlabel = process()
-
-    labels = normalize_and_cluster(train_label, train_unlabel)
-
-    y_unlabel = actual_label(labels, train_label, y_label)
-
-    x = 1
+    cluster_then_label()
