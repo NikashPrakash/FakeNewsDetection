@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 import gensim.downloader
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
-import data_process # For later, integrate common functions to reduce redundancy
+# import data_process # For later, integrate common functions to reduce redundancy
 
 nltk.download('stopwords')
 nltk.download('punkt')
@@ -138,7 +138,7 @@ def cluster_then_label():
     y_unlabel = actual_label(labels, x_train_label, y_label)
     
     x_train = np.vstack((x_train_label, train_unlabel))
-    y_train = np.vstack((y_label, y_unlabel))
+    y_train = np.concatenate((y_label, y_unlabel))
     return x_train, y_train, x_test, y_test
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from tqdm import tqdm
 from clustering import *
 
 class StanceDetect(nn.Module):
-    def __init__(self, distilBert: DistilBertModel, num_pos: int, hidden_dims: list(int)):
+    def __init__(self, distilBert: DistilBertModel, num_pos: int):
         """Initialize the stance-detection model with DistilBert and Linear layers
 
         Args:
@@ -32,15 +32,23 @@ class StanceDetect(nn.Module):
         return output
         
 
-def train(model, train, val):
-    
+def train(model, train, val, epoch):
+    model.train()
+    for i in range(epoch):
+        tr_loss = 0
+        n_correct = 0
+        nb_tr_steps = 0
+        nb_tr_examples = 0
+        for _, (x,y) in train:
+            pred = model(x)
+    pass
 
 if __name__ == "main":
-    
     x_train, y_train, x_test, y_test = cluster_then_label()
     # concatenate x_train and y_train to pass into DataLoader
-    train = DataLoader()
-    hidden_dim = 100 #TODO: Change to reasonable number , maybe based on dataset vocab or something else
+    x_train, y_train, x_test, y_test = x_train.tensor(), y_train.tensor(), x_test.tensor(), y_test.tensor()
+    train = DataLoader(list(zip(x_train,y_train)), batch_size=64)
+    test = DataLoader(list(zip(x_test,y_test)), batch_size=64)
     bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
     model = StanceDetect(bert_model, 2)
-    train(model,x_train,y_train)
+    train(model,train)
