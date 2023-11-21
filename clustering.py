@@ -139,7 +139,7 @@ def cluster_then_label():
     
     x_train = np.vstack((x_train_label, train_unlabel))
     y_train = np.concatenate((y_label, y_unlabel))
-    return x_train, y_train, x_test, y_test
+    return x_train.tensor(), y_train.tensor(), x_test.tensor(), y_test.tensor()
 
 if __name__ == "__main__":
     cluster_then_label()
