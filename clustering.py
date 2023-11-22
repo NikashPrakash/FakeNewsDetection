@@ -1,3 +1,4 @@
+#clustering.py
 #Notes (please read fully): First code block is most same from data_process.py. 
 #Changed a few important things: 
 #1). Dropped rows with NaN value for text in labelled and unlabelled
@@ -22,11 +23,12 @@ from sklearn.model_selection import train_test_split
 import gensim.downloader
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
+import torch
 # import data_process # For later, integrate common functions to reduce redundancy
 
-nltk.download('stopwords')
-nltk.download('punkt')
-glove = gensim.downloader.load('glove-wiki-gigaword-200')
+# nltk.download('stopwords')
+# nltk.download('punkt')
+# glove = gensim.downloader.load('glove-wiki-gigaword-200')
 
 def process_fake_news():
     filename = "fake-news.csv"
@@ -40,7 +42,7 @@ def process_unlabelled_data():
     df = df.dropna(subset=['text'])
     return df[["text"]]
 
-def get_glove_feature(df):
+def get_glove_feature(df,glove):
     features = []
     stop_words = set(stopwords.words('english'))
     for i, row in df.iterrows():
@@ -60,11 +62,11 @@ def split(df_x, df_y):
     X_train, X_test, y_train, y_test = train_test_split(df_x, df_y, train_size=0.75, random_state=random_state)
     return X_train, X_test, y_train, y_test
 
-def process():
+def process(glove):
     df = process_fake_news()
     unlab = process_unlabelled_data()
-    df_features = get_glove_feature(df)
-    train_unlabel = get_glove_feature(unlab)
+    df_features = get_glove_feature(df,glove)
+    train_unlabel = get_glove_feature(unlab,glove)
     train_label, X_test, y_label, y_test = split(df_features, df["label"])
     
     return train_label, X_test, y_label, y_test, train_unlabel
@@ -77,7 +79,7 @@ def normalize(features):
 
 def clustering(normalized_data):
     # Change to hierarchical clustering, compare different linkage methods for best
-    kmeans = KMeans(n_clusters=2) #Note: for the 3 categories - change accordingly as needed
+    kmeans = KMeans(n_clusters=2,n_init='auto') #Note: for the 3 categories - change accordingly as needed
     kmeans.fit(normalized_data)
     return kmeans.labels_
 #For now we are clustering both labelled and unlabelled data together as this si the standard.
@@ -133,13 +135,16 @@ def actual_label(labels, train_label, y_label):
 
     
 def cluster_then_label():
-    x_train_label, x_test, y_label, y_test, train_unlabel = process()
+    glove = gensim.downloader.load('glove-wiki-gigaword-200')
+    x_train_label, x_test, y_label, y_test, train_unlabel = process(glove)
     labels = normalize_and_cluster(x_train_label, train_unlabel)
     y_unlabel = actual_label(labels, x_train_label, y_label)
     
     x_train = np.vstack((x_train_label, train_unlabel))
     y_train = np.concatenate((y_label, y_unlabel))
-    return x_train.tensor(), y_train.tensor(), x_test.tensor(), y_test.tensor()
+    
+    return torch.from_numpy(x_train), torch.from_numpy(y_train), torch.from_numpy(x_test), torch.from_numpy(y_test.to_numpy())
 
 if __name__ == "__main__":
     cluster_then_label()
+    print("clustering done")
