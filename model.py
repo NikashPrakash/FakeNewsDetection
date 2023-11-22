@@ -1,3 +1,4 @@
+#model.py
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -6,7 +7,7 @@ from torch.nn import CrossEntropyLoss
 
 
 class StanceDetect(nn.Module):
-    def __init__(self, distilBert: DistilBertModel, num_pos: int):
+    def __init__(self, distilBert: DistilBertModel, num_pos: int, drop_rate: float):
         """Initialize the stance-detection model with DistilBert and Linear layers
 
         Args:
@@ -16,12 +17,13 @@ class StanceDetect(nn.Module):
         """
         super().__init__()
         
-        self.distilbert = distilBert
+        self.distilbert = DistilBertModel.from_pretrained('distilbert-base-uncased')
         self.classifier = nn.Sequential(
             nn.Linear(768, 768),
             nn.ReLU(),
-            nn.Dropout(0.3), # For regularization
-            nn.Linear(768,num_pos) # classification)
+            nn.Dropout(drop_rate), # For regularization
+            nn.Linear(768,num_pos), # classification)
+            nn.Softmax()
         )
         
     def forward(self,input_ids,attention_mask):
