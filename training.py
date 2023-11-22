@@ -1,6 +1,7 @@
 #training.py
 
 import torch
+import numpy as np
 from torch import nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer,AdamW,DistilBertModel
@@ -11,7 +12,7 @@ import clustering
 from model import StanceDetect
 from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold,GridSearchCV
-from skorch import NeuralNetClassifier
+# from skorch import NeuralNetClassifier
 import gensim.downloader
 # import os
 
@@ -26,18 +27,18 @@ import gensim.downloader
 #     filename = os.path.join(checkpoint_dir, "epoch={}.checkpoint.pth.tar".format(epoch))
 #     torch.save(state, filename)    
 
-# def predictions(logits):
-#     """Determine predicted class index given a tensor of logits.
+def predictions(logits):
+    """Determine predicted class index given a tensor of logits.
 
-#     Example: Given tensor([[0.2, -0.8], [-0.9, -3.1], [0.5, 2.3]]), return tensor([0, 0, 1])
+    Example: Given tensor([[0.2, -0.8], [-0.9, -3.1], [0.5, 2.3]]), return tensor([0, 0, 1])
 
-#     Returns:
-#         the predicted class output as a PyTorch Tensor
-#     """
-#     pred = logits.max(1)[1]
-#     return pred
+    Returns:
+        the predicted class output as a PyTorch Tensor
+    """
+    pred = logits.max(1)[1]
+    return pred
 
-def cross_val(x, y): 
+def cross_val(bert_model, x, y, device): 
     # Use a logarithmic scale to sample weight decays
     params = {
         'lr': [5e-6,1e-5, 5e-5, 1e-4, 5e-4, 1e-3],
@@ -45,36 +46,55 @@ def cross_val(x, y):
         'module__drop_rate': [0.1,0.3,0.5,0.6,0.75,0.9],
         'optimizer__weight_decay':[0, 1e-6, 1e-4, 1e-2]
     }
-    model =  NeuralNetClassifier(
-        StanceDetect,
-        criterion=nn.CrossEntropyLoss(),
-        lr=0.01,
-        optimizer=torch.optim.Adam,
-        iterator_train__shuffle=True,
-    )
-    gs = GridSearchCV(model, params, cv=5, scoring='accuracy',refit=False)
-    gs.fit(x,y)
-    # best_lr = gs.best_params_['lr']
-    # best_wd = gs.best_params_['wd']
-    # best_params = gs.best_params_
-    # best_model = gs.best_estimator_
+    
+    _vals = np.meshgrid(params['lr'], params['max_epochs'],params['module__drop_rate'],params['optimizer__weight_decay'])
+    param_set = np.array([_vals[0].ravel(), _vals[1].ravel(),_vals[2].ravel(), _vals[3].ravel()]).T
+    skf = StratifiedKFold(shuffle=True,random_state=42)
+    
+    best_performance = float('-inf')
+    
+    for lr, max_epoch, drop_rate, w_d in param_set:
+        model = StanceDetect(bert_model,2,drop_rate).to(device)
+        criterion=nn.CrossEntropyLoss()
+        optimizer=torch.optim.Adam(model.parameters(),weight_decay=w_d,lr=lr)
 
-    return gs.best_params_
+        performances = []
+        for tr_idx, val_idx in skf.split(x,y):
+            tr_x,val_x = x[tr_idx].to(device), x[val_idx].to(device)
+            tr_y,val_y = y[tr_idx].to(device), y[val_idx].to(device)
+            
+            train_loader = DataLoader(torch.tensor(list(zip(tr_x,tr_y))),batch_size=64)
+            val_loader = DataLoader(torch.tensor(list(zip(val_x,val_y))),batch_size=64)
+            
+            train(model,train_loader,max_epoch,optimizer,criterion)
 
-def train(model, train, epoch, optimizer): 
+            model.eval()
+            with torch.no_grad():
+                for v_x, v_y in val_loader:
+                    pred = model(v_x)
+                    pred = predictions(pred)
+                    correct += torch.sum(torch.eq(pred,v_y).type(torch.IntTensor))
+                    total += v_y.size(0)
+                performances.append(correct/total)
+        perf = np.mean(performances)
+        if perf > best_performance:
+            best_performance = perf
+            params = {'lr':lr,'max_epochs':max_epoch, 'module__drop_rate':drop_rate, 'optimizer__weight_decay':w_d}
+    return params, best_performance
 
-    train_loss, train_loss_ind, val_loss, val_loss_ind = [], [], [], []
-    num_itr = 0
-    best_model, best_accuracy = None, 0
-    loss_fn = nn.CrossEntropyLoss()    
+def train(model, train, epoch, optimizer,criterion): 
+
+    # train_loss, train_loss_ind, val_loss, val_loss_ind = [], [], [], []
+    # num_itr = 0
+    # best_model, best_accuracy = None, 0
 
     for i in range(epoch):
         model.train()
         for x,y in train:
-            num_itr += 1
+            # num_itr += 1
             pred = model(x)
             optimizer.zero_grad()
-            loss = loss_fn(pred, y)
+            loss = criterion(pred, y)
             loss.backward()
             optimizer.step()
                 
@@ -96,15 +116,13 @@ def train(model, train, epoch, optimizer):
             #     for val_x, val_y in val_loader:
                 
 
-def test(model, test_loader):
+def test(model, test_loader, device):
     model.eval()
-    corect = 0
+    correct = 0
     total = 0
     with torch.no_grad():
         for X, y in test_loader:
-            #X.cuda()
-            #y.cuda()
-            output = model(X)#.cuda()
+            output = model(X).to(device)
             # pred = predictions(output.data)
             correct += torch.sum(torch.eq(output,y).type(torch.IntTensor))
             total += y.size(dim=0)
@@ -128,38 +146,41 @@ def test(model, test_loader):
 #       curr_count_to_patience = 0
 #     return curr_count_to_patience, global_min_loss
 
+def process_input():
+    """ Change input data to be in format [(input_ids, attention_mask)] for training with DistilBert 
+    """
+    pass
 
 def main():
-    # print(torch.cuda.is_available())
-    print("aa")
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     x_train, y_train, x_test, y_test = clustering.cluster_then_label()
-    print("bb")
-    # test = DataLoader(list(zip(x_test,y_test)), batch_size=64)
+    x_test, y_test =x_test.to(device), y_test.to(device)
+    
     bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
-    print("cc")
+
     # patience = 5
     # curr_count_to_patience = 0
     # global_min_loss = stats[0][1]
         
     # while curr_count_to_patience < patience:
 
-    param = cross_val(x_train, y_train)
-    print("dd")
+    param, cv_perf = cross_val(bert_model, x_train, y_train, device)
+    print(f"cv_performance: {cv_perf}")
 
 
-    model = StanceDetect(bert_model, 2, param["module__drop_rate"])
+    model = StanceDetect(bert_model, 2, param["module__drop_rate"]).to(device)
     
     optimizer = torch.optim.Adam(params=model.parameters(), lr=param["lr"] , weight_decay=param["optimizer__weight_decay"])  
 
+    full_set = DataLoader(list(zip(x_train,y_train)),batch_size=64)
+    train(model,full_set, param['max_epochs'], optimizer)
 
-    train(model,torch.tensor(list(zip(x_train,y_train))), param['max_epochs'], optimizer)
-
-    accuracy = test(model, torch.tensor(list(zip(x_test,y_test))))
+    test_loader = DataLoader(torch.tensor(list(zip(x_test,y_test))),batch_size=64)
+    accuracy = test(model, test_loader,device)
 
     print(accuracy)
 
 if __name__ == "__main__":
     print('hey')
-    # glove = gensim.downloader.load('glove-wiki-gigaword-200')
     main()
 
