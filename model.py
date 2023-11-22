@@ -17,7 +17,7 @@ class StanceDetect(nn.Module):
         """
         super().__init__()
         
-        self.distilbert = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        self.distilbert = distilBert
         self.classifier = nn.Sequential(
             nn.Linear(768, 768),
             nn.ReLU(),
