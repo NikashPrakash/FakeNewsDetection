@@ -13,7 +13,7 @@ class StanceDetect(nn.Module):
         Args:
             distilBert (DistilBertModel): distilBert model block
             num_pos (int): number of logits/classes
-            hidden_dim list(int): number of hidden dimensions in linear layers
+            drop_rate float: percent of nodes dropped out between fully connected layers
         """
         super().__init__()
         
