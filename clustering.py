@@ -24,6 +24,7 @@ import gensim.downloader
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
 import torch
+from sklearn.cluster import AgglomerativeClustering
 # import data_process # For later, integrate common functions to reduce redundancy
 
 # nltk.download('stopwords')
@@ -82,6 +83,12 @@ def clustering(normalized_data):
     kmeans = KMeans(n_clusters=2,n_init='auto') #Note: for the 3 categories - change accordingly as needed
     kmeans.fit(normalized_data)
     return kmeans.labels_
+
+def clustering_Hierarchical(normalized_data):
+    clustering_model = AgglomerativeClustering(n_clusters=2, linkage='ward')  
+    clustering_model.fit(normalized_data)
+    return clustering_model.labels_
+    
 #For now we are clustering both labelled and unlabelled data together as this si the standard.
 #A possible future direction is to first cluster labelled data and get the cluster boundaries, before labelling unlabelled data based on where it falls in the boundaries.
 #This may result in improvement
