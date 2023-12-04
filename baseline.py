@@ -22,7 +22,12 @@ from sklearn.model_selection import train_test_split
 import gensim.downloader
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering
 # import data_process # For later, integrate common functions to reduce redundancy
+
+import tensorflow as tf
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense
 
 nltk.download('stopwords')
 nltk.download('punkt')
@@ -80,14 +85,47 @@ def clustering(normalized_data):
     kmeans = KMeans(n_clusters=2) #Note: for the 3 categories - change accordingly as needed
     kmeans.fit(normalized_data)
     return kmeans.labels_
+    #accuracy: 0.5875
+
 #For now we are clustering both labelled and unlabelled data together as this si the standard.
 #A possible future direction is to first cluster labelled data and get the cluster boundaries, before labelling unlabelled data based on where it falls in the boundaries.
 #This may result in improvement
+def clustering_Hierarchical(normalized_data):
+    clustering_model = AgglomerativeClustering(n_clusters=2, linkage='average')  
+    clustering_model.fit(normalized_data)
+    return clustering_model.labels_
+    #accuracy : 0.565
+
+from sklearn.mixture import GaussianMixture
+
+def clustering_GMM(normalized_data):
+    gmm = GaussianMixture(n_components=2, random_state=42)
+    gmm.fit(normalized_data)
+    labels = gmm.predict(normalized_data)
+    return labels
+    #accuracy: 0.5702
+
+from sklearn.cluster import DBSCAN, SpectralClustering
+
+def clustering_DBSCAN(normalized_data):
+    dbscan = DBSCAN(eps=0.5, min_samples=5)
+    labels = dbscan.fit_predict(normalized_data)
+    return labels
+    #accuracy: 0.5080
+
+def clustering_Spectral(normalized_data):
+    Spectral = SpectralClustering(n_clusters=2,affinity='nearest_neighbors', random_state=42)
+    labels = Spectral.fit_predict(normalized_data)
+    return labels
+    #accuracy: 
+
+
+# def cluster
 
 def normalize_and_cluster(train_label, train_unlabel):
     full_data = np.vstack((train_label, train_unlabel)) #Note: combined the labeled and unlabeled data
     normalized_data = normalize(full_data)
-    labels = clustering(normalized_data)
+    labels = clustering_Spectral(normalized_data)
 
     return labels
 
@@ -144,10 +182,6 @@ def cluster_then_label():
  #   cluster_then_label()
 
 x_train, y_train, x_test, y_test = cluster_then_label()
-
-import tensorflow as tf
-from tensorflow.keras import Sequential
-from tensorflow.keras.layers import Dense
 
 def create_model():
     model = Sequential()
