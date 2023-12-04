@@ -4,12 +4,13 @@ import torch
 import numpy as np
 from torch import nn
 import torch.nn.functional as F
-from transformers import AutoTokenizer,AdamW,DistilBertModel
+from transformers import AutoTokenizer,AdamW,DistilBertModel,DistilBertTokenizer
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 import clustering
-from model import StanceDetect
+from model import StanceDetect, BinaryDataset
 from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold,GridSearchCV
 # from skorch import NeuralNetClassifier
@@ -59,12 +60,16 @@ def cross_val(bert_model, x, y, device):
         optimizer=torch.optim.Adam(model.parameters(),weight_decay=w_d,lr=lr)
 
         performances = []
-        for tr_idx, val_idx in skf.split(x,y):
+        inpt = x['input_ids']
+        
+        for tr_idx, val_idx in skf.split(inpt,y):
             tr_x,val_x = x[tr_idx].to(device), x[val_idx].to(device)
             tr_y,val_y = y[tr_idx].to(device), y[val_idx].to(device)
-            
+            # Currenty x is a dict of inpt_ids, atten_mask
+            # Need to be torch.utils.data.dataset.Subset 
+            # 
             train_loader = DataLoader(torch.tensor(list(zip(tr_x,tr_y))),batch_size=64)
-            val_loader = DataLoader(torch.tensor(list(zip(val_x,val_y))),batch_size=64)
+            val_loader = DataLoader(torch.tensor(list(zip(val_x,val_y))),batch_size=64,collate_fn=basic_collate_fn)
             
             train(model,train_loader,max_epoch,optimizer,criterion)
 
@@ -90,13 +95,17 @@ def train(model, train, epoch, optimizer,criterion):
 
     for i in range(epoch):
         model.train()
-        for x,y in train:
+        for batch in train:
             # num_itr += 1
-            pred = model(x)
+            #tokenize here before passing into the model - not needed
             optimizer.zero_grad()
+            y = batch['labels']
+            input_ids = batch['input_ids']
+            attention_mask = batch['attention_mask']
+            pred = model(input_ids,attention_mask)
             loss = criterion(pred, y)
             loss.backward()
-            optimizer.step()
+            optimizer.step() 
                 
             # if num_itr % collect_cycle == 0:  # Data collection cycle
             #     train_loss.append(loss.item())
@@ -121,8 +130,11 @@ def test(model, test_loader, device):
     correct = 0
     total = 0
     with torch.no_grad():
-        for X, y in test_loader:
-            output = model(X).to(device)
+         for batch in test_loader:
+            y = batch['labels']
+            input_ids = batch['input_ids']
+            attention_mask = batch['attention_mask']
+            output = model(input_ids,attention_mask).to(device)
             # pred = predictions(output.data)
             correct += torch.sum(torch.eq(output,y).type(torch.IntTensor))
             total += y.size(dim=0)
@@ -151,12 +163,38 @@ def process_input():
     """
     pass
 
+def basic_collate_fn(batch):
+    """Collate function for basic setting."""
+
+    inputs = []
+    outputs = []
+
+    ############################## START OF YOUR CODE ##############################
+    input_ten = []
+    for data in batch:
+        outputs += [torch.tensor(data['pos_ids'])]
+        input_ten += [torch.tensor(data['input_ids'])]
+    input_ten = pad_sequence(input_ten, batch_first=True)
+    outputs = pad_sequence(outputs, batch_first=True)
+    
+    atten_masks = torch.zeros_like(input_ten)
+    atten_masks[input_ten != 0] = 1
+    inputs = {'input_ids': input_ten, 'attention_mask': atten_masks}
+    ############################### END OF YOUR CODE ###############################
+
+    return inputs, outputs
+
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     x_train, y_train, x_test, y_test = clustering.cluster_then_label()
-    x_test, y_test =x_test.to(device), y_test.to(device)
+    print("done")
+    y_test = y_test.to(device)
     
     bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+
+    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+    x_tokenized_inputs = tokenizer(x_train.tolist(), padding=True, truncation=True, max_length=300, return_tensors='pt')
+    test_inputs = tokenizer(x_test.tolist(), padding=True, truncation=True, max_length=300, return_tensors='pt').to(device)
 
     # patience = 5
     # curr_count_to_patience = 0
@@ -164,23 +202,34 @@ def main():
         
     # while curr_count_to_patience < patience:
 
-    param, cv_perf = cross_val(bert_model, x_train, y_train, device)
-    print(f"cv_performance: {cv_perf}")
+    # param, cv_perf = cross_val(bert_model, x_tokenized_inputs, y_train, device)
+    # print(f"cv_performance: {cv_perf}")
 
 
-    model = StanceDetect(bert_model, 2, param["module__drop_rate"]).to(device)
+    # model = StanceDetect(bert_model, 2, param["module__drop_rate"]).to(device)
+
+    model = StanceDetect(bert_model, 2, 0.75).to(device)
     
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=param["lr"] , weight_decay=param["optimizer__weight_decay"])  
+    # optimizer = torch.optim.Adam(params=model.parameters(), lr=param["lr"] , weight_decay=param["optimizer__weight_decay"])  
 
-    full_set = DataLoader(list(zip(x_train,y_train)),batch_size=64)
-    train(model,full_set, param['max_epochs'], optimizer)
+    optimizer = torch.optim.Adam(params=model.parameters(),  lr=5e-5, weight_decay=1e-5)  
 
-    test_loader = DataLoader(torch.tensor(list(zip(x_test,y_test))),batch_size=64)
-    accuracy = test(model, test_loader,device)
+
+    x_tokenized_inputs['labels'] = y_train
+    full_set = BinaryDataset(x_tokenized_inputs.to(device))
+    full_set = DataLoader(full_set, batch_size=64)
+
+    criterion = nn.CrossEntropyLoss()
+    
+    train(model,full_set, 25, optimizer, criterion)
+    # train(bert_model, full_set, 25, optimizer, criterion)
+    test_inputs['labels'] = y_test
+    test_inputs = BinaryDataset(test_inputs.to(device))
+    test_inputs = DataLoader(test_inputs,batch_size=64)
+    accuracy = test(model, test_inputs, device)
 
     print(accuracy)
 
 if __name__ == "__main__":
-    print('hey')
     main()
 
