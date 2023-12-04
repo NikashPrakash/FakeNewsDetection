@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from transformers import DistilBertModel
-from torch.nn import CrossEntropyLoss
+from torch.utils.data import Dataset
 
 
 class StanceDetect(nn.Module):
@@ -24,9 +24,24 @@ class StanceDetect(nn.Module):
             nn.Dropout(drop_rate), # For regularization
             nn.Linear(768,num_pos), # classification)
             nn.Softmax()
+            # nn.Sigmoid()
         )
         
     def forward(self,input_ids,attention_mask):
         bert = self.distilbert(input_ids=input_ids,attention_mask=attention_mask)
         output = self.classifier(bert.last_hidden_state)
-        return output
+        return output.mean(dim=1)
+    
+class BinaryDataset(Dataset):
+    """Dataset for POS tagging"""
+
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+    
+    def __len__(self):
+        return len(self.data['labels'])
+    
+
+    def __getitem__(self, idx):
+        return {key: torch.tensor(val[idx]) for key, val in self.data.items()}
