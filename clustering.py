@@ -24,6 +24,8 @@ import gensim.downloader
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
 import torch
+from sklearn.cluster import AgglomerativeClustering
+
 # import data_process # For later, integrate common functions to reduce redundancy
 
 # nltk.download('stopwords')
@@ -71,11 +73,22 @@ def process(glove):
     
     return train_label, X_test, y_label, y_test, train_unlabel
 
+def proces_normal():
+    df = process_fake_news()
+    unlab = process_unlabelled_data()
+    train_label, X_test, _, _ = split(df, df["label"])
+    
+    return train_label["text"], X_test["text"], unlab.squeeze()
 
 #Note: K-Means is very sensitive to the scale of the features, so used L2 normalization. L2 normalization will not distort direction so semantic value from GloVe will still be there
 def normalize(features):
     normalizer = Normalizer()
     return normalizer.fit_transform(features)
+
+def clustering_Hierarchical(normalized_data):
+    clustering_model = AgglomerativeClustering(n_clusters=2, linkage='ward')  
+    clustering_model.fit(normalized_data)
+    return clustering_model.labels_
 
 def clustering(normalized_data):
     # Change to hierarchical clustering, compare different linkage methods for best
@@ -99,11 +112,11 @@ def actual_label(labels, train_label, y_label):
     To give the unlabeled data labels based of the labeled data set?    
     """
     cluster0 = {}
-    cluster0["lab_0"] = 0
-    cluster0["lab_1"] = 0
+    cluster0[0] = 0
+    cluster0[1] = 0
     cluster1 = {}
-    cluster1["lab_0"] = 0
-    cluster1["lab_1"] = 0
+    cluster1[0] = 0
+    cluster1[1] = 0
     i = 0
     size = train_label.shape[0]
     for label in labels:
@@ -111,19 +124,19 @@ def actual_label(labels, train_label, y_label):
             break
         if label == 0:
             actual_label = y_label.iloc[i]
-            if actual_label == 0:
-                cluster0["lab_0"] += 1
-            else:
-                cluster0["lab_1"] += 1
+            if actual_label == 0:               #dont need this
+                cluster0[actual_label] += 1
+            else:                               #dont need this
+                cluster0[actual_label] += 1
         else:
             actual_label = y_label.iloc[i]
-            if actual_label == 0:
-                cluster1["lab_0"] += 1
-            else:
-                cluster1["lab_1"] += 1
+            if actual_label == 0:               #dont need this
+                cluster1[actual_label] += 1
+            else:                               #dont need this
+                cluster1[actual_label] += 1
         i += 1
-    ratio0 = cluster0["lab_0"]/cluster1["lab_0"]
-    ratio1 = cluster0["lab_1"]/cluster1["lab_1"]
+    ratio0 = cluster0[0]/cluster1[0]
+    ratio1 = cluster0[1]/cluster1[1]
     y_unlabel = labels[size:]
     if ratio1 > ratio0:
         for label in y_unlabel:
@@ -136,14 +149,15 @@ def actual_label(labels, train_label, y_label):
     
 def cluster_then_label():
     glove = gensim.downloader.load('glove-wiki-gigaword-200')
-    x_train_label, x_test, y_label, y_test, train_unlabel = process(glove)
+    x_train_label, _, y_label, y_test, train_unlabel = process(glove)
+    x_train_actual, x_test, train_unlab_actual = proces_normal()
     labels = normalize_and_cluster(x_train_label, train_unlabel)
     y_unlabel = actual_label(labels, x_train_label, y_label)
     
-    x_train = np.vstack((x_train_label, train_unlabel))
+    x_train = np.concatenate((x_train_actual, train_unlab_actual))
     y_train = np.concatenate((y_label, y_unlabel))
     
-    return torch.from_numpy(x_train), torch.from_numpy(y_train), torch.from_numpy(x_test), torch.from_numpy(y_test.to_numpy())
+    return x_train, torch.from_numpy(y_train), x_test, torch.from_numpy(y_test.to_numpy())
 
 if __name__ == "__main__":
     cluster_then_label()
