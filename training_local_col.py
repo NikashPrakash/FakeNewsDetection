@@ -511,7 +511,7 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     
-    train(model,full_set, 25, optimizer, criterion)
+    train(model,full_set, 20, optimizer, criterion)
     # train(bert_model, full_set, 25, optimizer, criterion)
     test_inputs['labels'] = y_test
     test_inputs = BinaryDataset(test_inputs.to(device))
