@@ -400,7 +400,7 @@ def test(model, test_loader, device):
     model.eval()
     correct = 0
     total = 0
-    train_accuracy, train_precision, train_recall = 0.0, 0.0, 0.0, 0.0
+    train_accuracy, train_precision, train_recall = 0.0, 0.0, 0.0
     sum = 0.0
     with torch.no_grad():
         for batch in test_loader:
