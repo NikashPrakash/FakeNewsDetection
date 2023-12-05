@@ -132,9 +132,10 @@ def test(model, test_loader, device):
     with torch.no_grad():
          for batch in test_loader:
             y = batch['labels']
+            y = F.one_hot(y, num_classes=2).float()
             input_ids = batch['input_ids']
             attention_mask = batch['attention_mask']
-            output = model(input_ids,attention_mask).to(device)
+            output = model(input_ids,attention_mask).argmax(dim=1)
             # pred = predictions(output.data)
             correct += torch.sum(torch.eq(output,y).type(torch.IntTensor))
             total += y.size(dim=0)
@@ -235,5 +236,5 @@ if __name__ == "__main__":
     main()
     print("done")
 
-    
+
 

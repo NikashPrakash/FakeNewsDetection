@@ -23,14 +23,17 @@ class StanceDetect(nn.Module):
             nn.ReLU(),
             nn.Dropout(drop_rate), # For regularization
             nn.Linear(768,num_pos), # classification)
-            nn.Softmax()
+            # nn.Softmax()
             # nn.Sigmoid()
         )
+        self.soft = nn.Softmax(dim=1)
         
     def forward(self,input_ids,attention_mask):
         bert = self.distilbert(input_ids=input_ids,attention_mask=attention_mask)
         output = self.classifier(bert.last_hidden_state)
-        return output.mean(dim=1)
+        output = output.mean(dim=1)
+        vals = self.soft(output)
+        return vals
     
 class BinaryDataset(Dataset):
     """Dataset for POS tagging"""
