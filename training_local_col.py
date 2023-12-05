@@ -33,13 +33,13 @@ nltk.download('punkt')
 glove = gensim.downloader.load('glove-wiki-gigaword-200')
 
 def process_fake_news():
-    filename = "f-n.csv"
+    filename = "fake-news.csv"
     df = pd.read_csv(filename)
     df = df.dropna(subset=['text'])
     return df[["text", "label"]]
 
 def process_unlabelled_data():
-    filename = "p-b.csv"
+    filename = "political-bias.csv"
     df = pd.read_csv(filename)
     df = df.dropna(subset=['text'])
     return df[["text"]]
