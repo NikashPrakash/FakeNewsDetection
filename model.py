@@ -47,4 +47,4 @@ class BinaryDataset(Dataset):
     
 
     def __getitem__(self, idx):
-        return {key: torch.tensor(val[idx]) for key, val in self.data.items()}
+        return {key: val[idx].clone().detach() for key, val in self.data.items()}
