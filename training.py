@@ -1,5 +1,5 @@
 #training.py
-
+import pandas as pd
 import torch
 import numpy as np
 from torch import nn
@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
-import gensim.downloader, itertools
+import itertools
 
 import os
 import clustering, utils
@@ -186,17 +186,16 @@ def evaluate_epoch(
    # axes,
     tr_loader,
     val_loader,
-    te_loader,
     model,
     criterion,
-    epoch,
     stats,
+    te_loader=None,
     include_test=False,
     # update_plot=True,
     # multiclass=False,
 ):
     """Evaluate the `model` on the train and validation set."""
-
+    model.eval()
     def _get_metrics(loader):
         y_true, y_pred = [], []
         correct, total, true_posit, false_posit, false_neg = 0, 0, 0, 0, 0
@@ -266,55 +265,40 @@ def evaluate_epoch(
 #                 continue
 #             print(f"\t{split} {metric}:{round(stats[-1][idx],4)}")
 
-# def cross_val(bert_model, x, y, device): 
-#     Use a logarithmic scale to sample weight decays
-#     params = {
-#         'lr': [5e-6,1e-5, 5e-5, 1e-4, 5e-4, 1e-3],
-#         'max_epochs': [5, 10, 20, 30],
-#         'module__drop_rate': [0.1,0.3,0.5,0.6,0.75,0.9],
-#         'optimizer__weight_decay':[0, 1e-6, 1e-4, 1e-2]
-#     }
+def search_hyperparams(bert_model, tr_loader, val_loader, device): 
+    params = {
+        'lr': [5e-6,1e-5, 5e-5, 1e-4, 5e-4, 1e-3],
+        'module__drop_rate': [0.1,0.3,0.5,0.75],
+        'optimizer__weight_decay':[0, 1e-6, 1e-4, 1e-2]
+    }
     
-#     _vals = np.meshgrid(params['lr'], params['max_epochs'],params['module__drop_rate'],params['optimizer__weight_decay'])
-#     param_set = np.array([_vals[0].ravel(), _vals[1].ravel(),_vals[2].ravel(), _vals[3].ravel()]).T
-#     skf = StratifiedKFold(shuffle=True,random_state=42)
+    _vals = np.meshgrid(params['lr'],params['module__drop_rate'],params['optimizer__weight_decay'])
+    param_set = np.array([_vals[0].ravel(), _vals[1].ravel(),_vals[2].ravel()]).T
     
-#     best_performance = float('-inf')
-    
-#     for lr, max_epoch, drop_rate, w_d in param_set:
-#         model = StanceDetect(bert_model,2,drop_rate).to(device)
-#         criterion=nn.CrossEntropyLoss()
-#         optimizer=torch.optim.Adam(model.parameters(),weight_decay=w_d,lr=lr)
+    best_performance = float('inf')
+    stats = []
+    for lr, drop_rate, w_d in param_set:
+        model = StanceDetect(bert_model,2,drop_rate).to(device)
+        criterion=nn.CrossEntropyLoss()
+        optimizer=torch.optim.Adam(model.parameters(),weight_decay=w_d,lr=lr)         
 
-#         performances = []
-#         inpt = x['input_ids']
+        evaluate_epoch(#axes,
+                   tr_loader, val_loader, model, criterion, stats)
         
-#         for tr_idx, val_idx in skf.split(inpt,y):
-#             tr_x,val_x = x[tr_idx].to(device), x[val_idx].to(device)
-#             tr_y,val_y = y[tr_idx].to(device), y[val_idx].to(device)
-#             # Currenty x is a dict of inpt_ids, atten_mask
-#             # Need to be torch.utils.data.dataset.Subset 
-#             # 
-#             train_loader = DataLoader(torch.tensor(list(zip(tr_x,tr_y))),batch_size=64)
-#             val_loader = DataLoader(torch.tensor(list(zip(val_x,val_y))),batch_size=64)
-            
-#             train(model,train_loader,max_epoch,optimizer,criterion)
+        train(model, optimizer, criterion, tr_loader, val_loader, stats, 0, True)
 
-#             model.eval()
-#             with torch.no_grad():
-#                 for v_x, v_y in val_loader:
-#                     pred = model(v_x)
-#                     pred = predictions(pred)
-#                     correct += torch.sum(torch.eq(pred,v_y).type(torch.IntTensor))
-#                     total += v_y.size(0)
-#                 performances.append(correct/total)
-#         perf = np.mean(performances)
-#         if perf > best_performance:
-#             best_performance = perf
-#             params = {'lr':lr,'max_epochs':max_epoch, 'module__drop_rate':drop_rate, 'optimizer__weight_decay':w_d}
-#     return params, best_performance
+        
+        evaluate_epoch(#axes,
+                   tr_loader, val_loader, model, criterion, stats)
+        
+        if stats[-1][1] < best_performance:
+            best_performance = stats[-1][1]
+            params = {'lr':lr, 'module__drop_rate':drop_rate, 'optimizer__weight_decay':w_d}
+    return params, best_performance
 
-def train(model, train, optimizer,criterion):
+
+
+def train_epoch(model, train, optimizer,criterion):
     model.train()
     for batch in train:
         optimizer.zero_grad()
@@ -326,28 +310,44 @@ def train(model, train, optimizer,criterion):
         loss = criterion(pred, y)
         loss.backward()
         optimizer.step()
-                
 
-# def test(model, test_loader):
-#     model.eval()
-#     correct = 0
-#     total = 0
-#     with torch.no_grad():
-#          for batch in test_loader:
-#             y = batch['labels']
-#             input_ids = batch['input_ids']
-#             attention_mask = batch['attention_mask']
-#             output = model(input_ids,attention_mask).argmax(dim=1)
-#             # pred = predictions(output.data)
-#             correct += torch.sum(torch.eq(output,y).type(torch.IntTensor))
-#             total += y.size(dim=0)
 
-#     return correct / total
+def train(model, optimizer, criterion, train_loader, val_loader, stats, start_epoch, cv):
+    patience = 5
+    curr_count_to_patience = 0
+    global_min_loss = stats[0][1]
+
+    epoch = start_epoch
+    while curr_count_to_patience < patience:
+        train_epoch(model,train_loader, optimizer, criterion)
+        evaluate_epoch(
+            # axes,
+            train_loader,
+            val_loader,
+            model,
+            criterion,
+            epoch + 1,
+            stats,
+        )
+        # Save model parameters
+        if not cv:
+            save_checkpoint(model, epoch + 1, config("DistilBert_FineTune.checkpoint"), stats)
+
+        # update early stopping parameters
+        curr_count_to_patience, global_min_loss = early_stopping(
+            stats, curr_count_to_patience, global_min_loss
+        )
+
+        epoch += 1
+    return epoch
+
 
 
 def early_stopping(stats, curr_count_to_patience, global_min_loss):
     """Calculate new patience and validation loss.
 
+    Increment curr_patience by one if new loss is not less than global_min_loss
+    Otherwise, update global_min_loss with the current val loss, and reset curr_count_to_patience to 0
     Increment curr_patience by one if new loss is not less than global_min_loss
     Otherwise, update global_min_loss with the current val loss, and reset curr_count_to_patience to 0
 
@@ -360,9 +360,12 @@ def early_stopping(stats, curr_count_to_patience, global_min_loss):
       curr_count_to_patience = 0
     return curr_count_to_patience, global_min_loss
 
+
+
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     x_train, y_train, x_test, y_test = clustering.cluster_then_label()
+    print("device: ",device)
     print("device: ",device)
     y_test = y_test.to(device)
     
@@ -390,61 +393,32 @@ def main():
     test_loader = DataLoader(test_loader,batch_size=64)
     
     #####################################   
-    # param, cv_perf = cross_val(bert_model, train_loader, device)
-    # print(f"cv_performance: {cv_perf}")
-    # model = StanceDetect(bert_model, 2, param["module__drop_rate"]).to(device)
-    # optimizer = torch.optim.Adam(params=model.parameters(), lr=param["lr"] , weight_decay=param["optimizer__weight_decay"]) 
+    param, perf = search_hyperparams(bert_model, train_loader, device)
+    print(f"hyperparam search best val loss: {perf}")
+    model = StanceDetect(bert_model, 2, param["module__drop_rate"]).to(device)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=param["lr"] , weight_decay=param["optimizer__weight_decay"]) 
     #####################################   
     
-    model = StanceDetect(bert_model, 2, 0.75)
-
     model, start_epoch, stats = restore_checkpoint(model, config("DistilBert_FineTune.checkpoint"), torch.cuda.is_available())
     model.to(device)
     
     optimizer = torch.optim.Adam(params=model.parameters(),  lr=5e-5, weight_decay=1e-5)  
     criterion = CrossEntropyLoss()
     
-    # evaluate_epoch(#axes,
-    #                train_loader, val_loader, test_loader, model, criterion, start_epoch, stats)
+    evaluate_epoch(#axes,
+                   train_loader, val_loader, test_loader, model, criterion, stats)
     
-    # patience = 5
-    # curr_count_to_patience = 0
-    # global_min_loss = stats[0][1]
-
-    # epoch = start_epoch
-    # while curr_count_to_patience < patience:
-    #     train(model,train_loader, optimizer, criterion)
-    #     evaluate_epoch(
-    #         # axes,
-    #         train_loader,
-    #         val_loader,
-    #         test_loader,
-    #         model,
-    #         criterion,
-    #         epoch + 1,
-    #         stats,
-    #         include_test=False,
-    #     )
-
-    #     # Save model parameters
-    #     save_checkpoint(model, epoch + 1, config("DistilBert_FineTune.checkpoint"), stats)
-
-    #     # update early stopping parameters
-    #     curr_count_to_patience, global_min_loss = early_stopping(
-    #         stats, curr_count_to_patience, global_min_loss
-    #     )
-
-    #     epoch += 1
+    train(model, optimizer, criterion, train_loader, val_loader, stats, start_epoch)
     # utils.save_dbert_training_plot()
     
     best_epoch = np.array(stats)[:,1].argmin() + 1
-    # model, stats = restore_best(model, best_epoch, config("DistilBert_FineTune.checkpoint"), torch.cuda.is_available())
+    model, stats = restore_best(model, best_epoch, config("DistilBert_FineTune.checkpoint"), torch.cuda.is_available())
     
     evaluate_epoch(#axes,
-                   train_loader, val_loader, test_loader, model, criterion, best_epoch, stats, include_test=True)
-    stats = np.array(stats[0:9])
+                   train_loader, val_loader, model, criterion, stats, test_loader, include_test=True)
+    stats = np.array(stats[0:-1])
     utils.make_training_plot(stats)
-    
+    print(pd.DataFrame(np.array(stats[-1]).reshape(3,4), columns=['Accuracy','Loss','Recall','Precision'],index=["Val","Train","Test"]).reindex(["Train","Val","Test"]))
 
 
 if __name__ == "__main__":
