@@ -4,5 +4,17 @@
         "learning_rate": 1e-3,
         "batch_size": 32,
         "num_classes": 2
+    },
+    "DistilBert_Hyper": {
+        "checkpoint": "./checkpoints/dbert_h/",
+        "learning_rate": 1e-3,
+        "batch_size": 32,
+        "num_classes": 2
+    },
+    "Cur_Hyper": {
+        "checkpoint": "./checkpoints/hyper_save/",
+        "learning_rate": 1e-3,
+        "batch_size": 32,
+        "num_classes": 2
     }
 }
