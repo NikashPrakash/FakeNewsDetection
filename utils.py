@@ -37,17 +37,10 @@ def make_training_plot(stats, name="DistilBert Fine-Tuning"):
     axes[3].set_xlabel("Epoch")
     axes[3].set_ylabel("Precision")
 
-    plot_training_plot(axes, stats)
-    
-
-
-def plot_training_plot(axes, stats):
-    """Update the training plot with a new data point for loss and accuracy."""
     epoch_set = np.arange(len(stats))
     for i in range(4):
         axes[i].plot(epoch_set,stats[:,0+i], 'r--', marker="o", label="Validation")
         axes[i].plot(epoch_set,stats[:,4+i], 'b--', marker="o", label="Training")
-        axes[i].plot(epoch_set,stats[:,8+i], 'g--', marker="o", label="Testing")
         axes[i].legend()
     save_dbert_training_plot()
     
