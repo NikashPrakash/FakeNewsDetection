@@ -173,8 +173,9 @@ def hyper_search(bert_model, tr_loader, val_loader, device):
     
     _vals = np.meshgrid(params['lr'],params['module__drop_rate'],params['optimizer__weight_decay'])
     param_set = np.array([_vals[0].ravel(), _vals[1].ravel(),_vals[2].ravel()]).T
-    param_set = param_set[4:]
-    best_performance = 0.47190782898350764
+    # param_set = param_set[4:]
+    # best_performance = 0.47190782898350764
+    best_performance = float('inf')
     for lr, drop_rate, w_d in param_set:
         #add cross-val
         stats = []
@@ -271,6 +272,9 @@ def main():
     
     bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+    
+    for param in bert_model.parameters(): #transfer learning, comment out for fine-tuning
+        param.requires_grad = False    
     
     tr_idx, val_idx = train_test_split(np.arange(y_train.size(0)),shuffle=True,test_size=0.1,stratify=y_train)
     x_train, x_val = x_train[tr_idx], x_train[val_idx]
