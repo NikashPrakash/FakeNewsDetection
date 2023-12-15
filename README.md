@@ -1,32 +1,43 @@
-# Media Bias Detection
+# Fake News Detection
 
-## Methodology
+#### -- Project Status: On-Hold
 
-#### SSL Method employed - Cluster-than-label SSL along woth contrastive learning and word embeddings
+## Project Intro/Objective
+Fake news detection is something that all of us are deeply passionate about. We feel that news has become more commercialized and is being used to push agendas rather than speak the truth. We think this way for both aisles of the political spectrum. However, we also acknowledge the importance of having a free and effective media ecosystem to promote democracy and growth. We believe that one way to help solve this issue is to identify fake news so that news companies can be held accountable and democracy can be strengthened. Natural Language Processing is one of the main ways for us to detect such biases, as we can do this automatically.
+
+### Partners
+* Devang Chowdhuary, Venkat Kannan
+
+
+### Methods Used
+* Inferential Statistics
+* Machine Learning
+* Data Visualization
+* Natural Language Processing
+
+#### Methodology
 
 1. Collect unlabelled datapoints that correspond to our task.
-2. We will preprocess the data. To do this, we will get in the text such as glove embeddings. {{After this, we may also add additonal features such as author, etc}}
-3. We will then use cluster-than-label SSL procedure
-   1. First we will use hierarchical, **spectral** (normalize data first), k means, or other cluster methods to create clusters. {{We will use the method with highest performance / most clear set of clusters.}}
-   2. We will then label the clusters based on the most prevalent label in that cluster (based on already labeled data ins the cluster). This will mean that each cluster's label will correspond to a label in the labelled dataset.
-   3. {{We may use methods such as contrastive learning to seperate the data more clearly to have more distinct boundaries}}
-   4. We will then label each unlabelled datapoint in a cluster based on which label the cluster corresponds to.
-4. We will train either a RNN or transformer to classify new inputs into a label.
-5. We will test on our test data set and use evaluation metrics to evalute performance.
+2. Preprocess the data. To do this, we will get in the text such as glove embeddings
+3. Cluster-than-label SSL procedure
+   1. Normalize/preprocess data -> Glove Embeddings -> K-means (k=2)
+   2. Label the clusters based on the most prevalent label in that cluster (based on already labeled data ins the cluster). This will mean that each cluster's label will correspond to a label in the labelled dataset.
+   4. Label each unlabelled datapoint in a cluster based on which label the cluster corresponds to.
+4. Randomized hyperparameter search with dedicated train/val split
+5. Fine-tune DistilBert with extra classification layers to classify new inputs into a label.
+6. Test on our test data set and use evaluation metrics to evalute performance.
 
-Note: We will also try Mean Teacher ass our SSL method to see if it improves results
+### Technologies
+* Python
+* Pytorch
+* Natural Language Processing
+* High Performance Computing - U of M Great Lakes
+* Pandas, Numpy
 
-<!-- input for cluster: -->
+## Getting Started
 
+1. Clone this repo (for help see this [tutorial](https://help.github.com/articles/cloning-a-repository/)).
+2. Raw Data is being kept at [here](https://github.com/Media-Bias-Group/MBIB#introducing-mbib---the-first-media-bias-identification-benchmark-task-and-dataset-collection) within this repo.    
+3. Data processing/transformation scripts are being kept [here](https://github.com/NikashPrakash/FakeNewsDetection/blob/main/clustering.py)
+4. Run training.py
 
-## Model Architecture
-
-#### Baseline Model
-
-#### RNN or Transformer
-
-##### Transformer
-1. DistilBert Layer
-2. Linear Layer 1: input_dim=hidden_dim[0], output=hidden_dim[1] --
-3. ReLU
-4. Linear Layer 2: input_dim=hidden_dim[1], output dim = (2,3)
