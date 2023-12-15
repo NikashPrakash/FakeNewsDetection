@@ -16,5 +16,17 @@
         "learning_rate": 1e-3,
         "batch_size": 32,
         "num_classes": 2
+    },
+    "Hyper_transfer1": {
+        "checkpoint": "./checkpoints/transfer1/",
+        "learning_rate": 1e-3,
+        "batch_size": 32,
+        "num_classes": 2
+    },
+    "Hyper_transfer2": {
+        "checkpoint": "./checkpoints/transfer2/",
+        "learning_rate": 1e-3,
+        "batch_size": 32,
+        "num_classes": 2
     }
 }
