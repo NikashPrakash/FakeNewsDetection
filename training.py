@@ -4,15 +4,11 @@ import torch
 import numpy as np
 from torch import nn
 import torch.nn.functional as F
-from transformers import AutoTokenizer,AdamW,DistilBertModel,DistilBertTokenizer
+from transformers import DistilBertModel,DistilBertTokenizer
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
-from torch.nn.utils.rnn import pad_sequence
 
-from tqdm import tqdm
-from sklearn import metrics
-from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
-import itertools
+from sklearn.model_selection import train_test_split
 
 import os
 import clustering, utils
@@ -93,8 +89,8 @@ def _get_metrics(model, criterion, loader):
             y = batch['labels']
             input_ids = batch['input_ids']
             attention_mask = batch['attention_mask']
-            output = model(input_ids,attention_mask) #output is softmaxed rn, shape (64, 2)
-            predicted = output.argmax(1) #class predictionss
+            output = model(input_ids,attention_mask) 
+            predicted = output.argmax(1)
             
             y_true.append(y)
             y_pred.append(predicted)                
@@ -121,7 +117,6 @@ def evaluate_epoch(
     model,
     criterion,
     stats
-    #, epoch
 ):
     """Evaluate the `model` on the train and validation set."""
     model.eval()
@@ -141,50 +136,28 @@ def evaluate_epoch(
     ]
 
     stats.append(stats_at_epoch)
-    # log_training(epoch, stats)
-    
-    # if update_plot:
-    #     utils.update_training_plot(axes, epoch, stats)
-
-# def log_training(epoch, stats):
-#     """Print the train, validation, test accuracy/loss/auroc.
-
-#     Each epoch in `stats` should have order
-#         [val_acc, val_loss, val_auc, train_acc, ...]
-#     Test accuracy is optional and will only be logged if stats is length 9.
-#     """
-#     splits = ["Validation", "Train", "Test"]
-#     metrics = ["Accuracy", "Loss", "Recall", "Precision"]
-#     print("Epoch {}".format(epoch))
-#     for j, split in enumerate(splits):
-#         for i, metric in enumerate(metrics):
-#             idx = len(metrics) * j + i
-#             if idx >= len(stats[-1]):
-#                 continue
-#             print(f"\t{split} {metric}:{round(stats[-1][idx],4)}")
 
 
 def hyper_search(bert_model, tr_loader, val_loader, device): 
     params = {
-        'lr': [5e-6,1e-5, 5e-5, 1e-4, 5e-4, 1e-3],
+        'lr': [5e-6, 5e-5, 1e-4, 1e-3],
         'module__drop_rate': [0.1,0.3,0.5,0.75],
-        'optimizer__weight_decay':[0, 1e-6, 1e-4, 1e-2]
+        'optimizer__weight_decay':[1e-5, 1e-6, 1e-3, 0]
     }
-    
+
     _vals = np.meshgrid(params['lr'],params['module__drop_rate'],params['optimizer__weight_decay'])
     param_set = np.array([_vals[0].ravel(), _vals[1].ravel(),_vals[2].ravel()]).T
-    # param_set = param_set[4:]
-    # best_performance = 0.47190782898350764
+    np.random.seed(42)
+    param_set = param_set[np.random.randint(0,65,size=(15))]
+
     best_performance = float('inf')
     for lr, drop_rate, w_d in param_set:
-        #add cross-val
         stats = []
         model = StanceDetect(bert_model,2,drop_rate).to(device)
         criterion=nn.CrossEntropyLoss()
         optimizer=torch.optim.Adam(model.parameters(),weight_decay=w_d,lr=lr)         
 
-        evaluate_epoch(#axes,
-                   tr_loader, val_loader, model, criterion, stats)
+        evaluate_epoch(tr_loader, val_loader, model, criterion, stats)
         
         best_epoch = train(model, optimizer, criterion, tr_loader, val_loader, stats, 0, True)
         model, stats = restore_best(model, best_epoch, config('DistilBert_Hyper.checkpoint'))
@@ -223,26 +196,23 @@ def train(model, optimizer, criterion, train_loader, val_loader, stats, start_ep
     while curr_count_to_patience < patience:
         train_epoch(model,train_loader, optimizer, criterion)
         evaluate_epoch(
-            # axes,
             train_loader,
             val_loader,
             model,
             criterion,
-            stats#,
-            # epoch + 1
+            stats
         )
-        # Save model parameters
         if cv:
             save_checkpoint(model, epoch + 1, config("DistilBert_Hyper.checkpoint"), stats)
         else:
             save_checkpoint(model, epoch + 1, config("DistilBert_FineTune.checkpoint"), stats)
-        # update early stopping parameters
+
         curr_count_to_patience, global_min_loss = early_stopping(
             stats, curr_count_to_patience, global_min_loss
         )
         
         epoch += 1
-    return np.array(stats)[:,1].argmin() + 1
+    return np.array(stats)[:,1].argmin()
 
 
 def    early_stopping(stats, curr_count_to_patience, global_min_loss):
@@ -273,8 +243,8 @@ def main():
     bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
     
-    for param in bert_model.parameters(): #transfer learning, comment out for fine-tuning
-        param.requires_grad = False    
+    # for param in bert_model.parameters(): #transfer learning, comment out for fine-tuning
+    #     param.requires_grad = False    
     
     tr_idx, val_idx = train_test_split(np.arange(y_train.size(0)),shuffle=True,test_size=0.1,stratify=y_train)
     x_train, x_val = x_train[tr_idx], x_train[val_idx]
@@ -319,10 +289,9 @@ def main():
     # evaluate_epoch(#axes,
     #                train_loader, val_loader, model, criterion, stats, test_loader, include_test=True)
     
-    stat = np.array(stats[0:-1])
-    utils.make_training_plot(stat)
+    utils.make_training_plot(np.array(stats))
     stats[-1] += list(_get_metrics(model, criterion, test_loader))
-    np.save("best_model_stats.npy",np.array(stats))
+    # np.save("best_model_stats.npy",np.array(stats))
     print(pd.DataFrame(np.array(stats[-1]).reshape(3,4), columns=['Accuracy','Loss','Recall','Precision'],index=["Val","Train","Test"]).reindex(["Train","Val","Test"]))
 
 
